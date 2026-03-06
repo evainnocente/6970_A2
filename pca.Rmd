@@ -1,0 +1,448 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+Assignment 2:
+
+1- Perform PCA on this dataset treating differentially expressed genes as the variables.
+
+```{r}
+load("geneexpression2.rda")
+dat
+
+## EDA??
+str(dat)
+dim(dat)
+
+# any NAs?
+sum(is.na(dat))
+
+# create column of type of cell/status for plotting
+library(dplyr)
+library(tidyverse)
+dat_name <- dat %>%
+  rownames_to_column(var = "cell_type")
+
+dat_name <- dat %>%
+  rownames_to_column(var = "cell_type") %>%
+  mutate(status = case_when(cell_type(starts_with("HEA"))))
+
+
+dat_name <- dat_name %>%
+  mutate(status = case_when(str_starts(cell_type, "HEA") ~ "healthy", str_starts(cell_type, "MEL") ~ "melanoma"), type = case_when(str_detect(cell_type, "EFFE") ~ "effector", str_detect(cell_type, "MEM") ~ "memory", str_detect(cell_type, "NAI") ~ "naive"))
+
+dat_name %>%
+  group_by(cell_type) %>%
+  summarise()
+
+# Running PCA
+
+pc_data <- prcomp(dat) #, cor = F, scores = T) ## should we scale data?
+
+pc_data_scaled <- prcomp(dat, scale. = T)
+
+plot(pc_data)
+
+summary(pc_data)
+
+## Plotting scree plot and PC plot
+
+library(ggfortify)
+
+# plot all 
+autoplot(prcomp(dat), data = dat_name, colour="type", label = F, label.size = 3, size = 3, shape = "status") + theme_minimal()+labs(colour = "Cell Type", shape = "Status")  
+
+## screeplot
+plot(as.ts(pc_data$sdev^2))
+
+autoplot(prcomp(dat), data = dat_name, colour="status", label = F, label.size = 3, point.size= 5) + theme_minimal()+scale_colour_discrete(name="Status")
+
+## No scaling because every predictor is in same unit + DE data should be already scaled 
+## Plot scaled 
+autoplot(prcomp(dat, scale. = T), data = dat_name, colour="type", label = F, label.size = 3, size = 3, shape = "status") + theme_minimal()+labs(colour = "Cell Type", shape = "Status")  
+
+## need to separate by T cell type and status- not sure exactly what this is
+
+# Status= HEA -healthy and MEL=melanoma
+
+# separate columns
+
+
+
+
+
+
+```
+
+
+2- Visualize the PCs and investigate how they relate to cell and status types.
+3- Write down your interpretation considering the conclusions drawn in the article (Holmes et
+al., 2005)
+
+```{r}
+
+```
+
+
+
+Cytokines storm, a hyperinflammatory state caused by a deregulated immune system, is a key
+aspect of the novel coronavirus disease, with affected patients showing high levels of pro-
+inflammatory cytokines, which correlate with disease severity (Vanderkamp et al., 2025).
+Additional details regarding the role of cytokines in mediating the immune response can be
+found Table 1 (see Appendix). For this problem, you are provided with a dataset that includes
+measurements of 28 distinct analytes (cytokines, chemokines, and acute phase proteins) that
+were obtained from plasma samples of 76 human patients who tested positive for COVID-19.
+
+
+1- Develop a regularized logistic-regression model via Elastic-Net framework to predict
+COVID-19 disease progression by analyzing cytokine profiles and patient characteristics.
+
+1. Which cytokines are most effective at predicting the COVID-19 disease progression in
+patients?
+
+ie which are the top predictors?
+
+2. Which cytokines show a significant association with COVID-19 disease severity?
+3. How does patient age correlate with COVID-19 disease severity?
+
+```{r}
+library(lars)       # For diabetes dataset
+library(glmnet)     # For regularization methods
+library(caret)      # For data splitting and preprocessing
+library(ggplot2)    # For visualization
+library(dplyr)      # For data manipulation
+
+# Set seed for reproducibility
+set.seed(1717)
+
+# Load data
+
+
+# Check dimensions
+cat("Dataset dimensions:", dim(X), "\n")
+cat("Number of predictors:", ncol(X), "\n")
+cat("Number of observations:", length(y), "\n")
+
+# Split data into training (75%) and testing (25%) # how to randomly split?
+train_index <- createDataPartition(y, p = 0.75, list = FALSE)
+X_train <- X[train_index, ]
+X_test <- X[-train_index, ]
+y_train <- y[train_index]
+y_test <- y[-train_index]
+
+# Standardize predictors (glmnet does this by default with standardize=TRUE)
+# But we'll scale manually for consistency across methods
+X_train_scaled <- scale(X_train)
+X_test_scaled <- scale(X_test, 
+                       center = attr(X_train_scaled, "scaled:center"),
+                       scale = attr(X_train_scaled, "scaled:scale"))
+
+# Remove any columns with NA values (if scaling creates them due to zero variance)
+na_cols <- which(colSums(is.na(X_train_scaled)) > 0)
+if (length(na_cols) > 0) {
+  X_train_scaled <- X_train_scaled[, -na_cols]
+  X_test_scaled <- X_test_scaled[, -na_cols]
+  cat("Removed", length(na_cols), "columns with zero variance\n")
+}
+
+# now do the elasticnet
+
+# Cross-validation for elastic net with alpha=0.5
+cv_enet <- cv.glmnet(X_train_scaled, y_train, 
+                     alpha = 0.5, 
+                     nfolds = 10,
+                     type.measure = "mse")
+
+plot(cv_enet, main = "Elastic Net (alpha=0.5) - CV Error")
+# how many predictor left?
+# Extract lambda values
+enet_lambda_min <- cv_enet$lambda.min
+enet_lambda_1se <- cv_enet$lambda.1se
+
+cat("Elastic Net - Lambda min:", enet_lambda_min, "\n")
+cat("Elastic Net - Lambda 1se:", enet_lambda_1se, "\n")
+
+# Fit final models
+enet_model_min <- glmnet(X_train_scaled, y_train, 
+                         alpha = 0.5, 
+                         lambda = enet_lambda_min)
+
+enet_model_1se <- glmnet(X_train_scaled, y_train, 
+                         alpha = 0.5, 
+                         lambda = enet_lambda_1se)
+
+
+```
+
+
+
+2- For model evaluation, randomly split the full dataset into a 75% training set and a 25% test
+set (use seed: 1717 for reproducibility).
+
+
+3- For model training, use seq (0, 1, .01) as the search grid for alpha, i.e. Ridge and
+Lasso are included in the set of candidate elastic-net models. You may choose to use either
+“auc” or “deviance” as the accuracy measure (loss function) in cv.glmnet at the training
+stage (only use one of these two measure).
+
+grid search:
+
+```{r}
+alpha_grid <- seq(0, 1, by = 0.01)
+
+# Create container for results
+results <- data.frame()
+
+# Perform grid search
+for (alpha_val in alpha_grid) {
+  # Cross-validation for current alpha
+  cv_model <- cv.glmnet(X_train_scaled, y_train, 
+                        alpha = alpha_val, 
+                        nfolds = 10,
+                        type.measure = "mse",
+                        keep = TRUE)
+  
+  # Store results
+  results <- rbind(results, data.frame(
+    alpha = alpha_val,
+    lambda_min = cv_model$lambda.min,
+    lambda_1se = cv_model$lambda.1se,
+    cvm_min = min(cv_model$cvm),
+    cvm_1se = cv_model$cvm[which(cv_model$lambda == cv_model$lambda.1se)],
+    nzero_min = cv_model$nzero[which(cv_model$lambda == cv_model$lambda.min)],
+    nzero_1se = cv_model$nzero[which(cv_model$lambda == cv_model$lambda.1se)]
+  ))
+}
+
+# Print results
+print(results)
+
+# Find best alpha based on minimum CV error
+best_alpha_min <- results$alpha[which.min(results$cvm_min)]
+best_alpha_1se <- results$alpha[which.min(results$cvm_1se)]
+
+cat("\nBest alpha (lambda.min):", best_alpha_min, "\n")
+cat("Best alpha (lambda.1se):", best_alpha_1se, "\n")
+
+# Visualize alpha grid search
+ggplot(results, aes(x = alpha)) +
+  geom_line(aes(y = cvm_min, color = "lambda.min"), size = 1.2) +
+  geom_line(aes(y = cvm_1se, color = "lambda.1se"), size = 1.2) +
+  geom_point(aes(y = cvm_min, color = "lambda.min"), size = 3) +
+  geom_point(aes(y = cvm_1se, color = "lambda.1se"), size = 3) +
+  labs(title = "CV Error vs Alpha",
+       x = "Alpha (0=Ridge, 1=Lasso)",
+       y = "CV Error (MSE)",
+       color = "Lambda Type") +
+  theme_minimal()
+```
+
+
+4- Perform two separate sets of analysis by considering 10-fold and 20-fold cross-validation.
+cv_enet <- cv.glmnet(X_train_scaled, y_train, 
+                     alpha = 0.5, 
+                     nfolds = 10,
+                     type.measure = "mse")
+
+cv_enet <- cv.glmnet(X_train_scaled, y_train, 
+                     alpha = 0.5, 
+                     nfolds = 20,
+                     type.measure = "mse")
+
+
+5- Discuss the implications of cross-validation schemes (10/20 folds) on your analyses by
+providing a clear and concise comparison of model selection and predictive performance.
+
+```{r}
+
+```
+
+
+
+
+Full workflow:
+
+```{r}
+# Setting the seed
+set.seed(1717)
+
+# Load data
+
+covid_data <- read.csv("covid.csv")
+
+sum(is.na(covid_data))
+
+# Convert y to a binary variable where 0= mild and 1= severe
+covid_data <- covid_data %>%
+  mutate(severity_binary = as.factor(case_when(Severirty == "Mild" ~ 0, Severirty == "Severe" ~ 1)))
+
+class(covid_data$severity_binary)
+
+# Separate into x and y
+
+X <- as.matrix(covid_data[c(2, 5:32)])  # Predictors (expanded features)= everything but patient number and severity obviously # also omit sex
+y <- covid_data$severity_binary # Response= severity
+class(y)
+
+
+# Creating the test and training set, X is all the predictors and y is the response
+
+train_index <- createDataPartition(y, p = 0.75, list = FALSE) # how to split randomly?- i think its built in
+X_train <- X[train_index, ]
+X_test <- X[-train_index, ]
+y_train <- y[train_index]
+y_test <- y[-train_index]
+
+class(y_train)
+str(y_train)
+# Now do the grid search for the best alpha
+
+## first we do it with k=10 folds
+
+alpha_grid <- seq(0, 1, by = 0.01) # as specified
+
+# Create container for results
+results_k10 <- data.frame()
+
+# manually standardise predictors
+
+# Standardize predictors (glmnet does this by default with standardize=TRUE)
+# But we'll scale manually for consistency across methods
+X_train_scaled <- scale(X_train)
+X_test_scaled <- scale(X_test, 
+                       center = attr(X_train_scaled, "scaled:center"),
+                       scale = attr(X_train_scaled, "scaled:scale"))
+
+
+
+# Perform grid search, this will test all teh values of alpha then we'll be able to see which one was best
+for (alpha_val in alpha_grid) {
+  # Cross-validation for current alpha
+  cv_model <- cv.glmnet(X_train_scaled, y_train, 
+                        alpha = alpha_val, 
+                        nfolds = 10,
+                        type.measure = "auc", # using AUC for logistic
+                        keep = TRUE,
+                        family="binomial")
+                         # instead of manually
+  
+  # Store results
+  results_k10 <- rbind(results_k10, data.frame(
+    alpha = alpha_val,
+    lambda_min = cv_model$lambda.min,
+    lambda_1se = cv_model$lambda.1se,
+    cvm_min = min(cv_model$cvm),
+    cvm_1se = cv_model$cvm[which(cv_model$lambda == cv_model$lambda.1se)],
+    nzero_min = cv_model$nzero[which(cv_model$lambda == cv_model$lambda.min)],
+    nzero_1se = cv_model$nzero[which(cv_model$lambda == cv_model$lambda.1se)]
+  ))
+}
+
+# error Warning: Too few (< 10) observations per fold for type.measure='auc' in cv.lognet; changed to type.measure='deviance'. Alternatively, use smaller value for nfolds
+
+# Print results
+print(results_k10)
+
+# Find best alpha based on minimum CV error
+best_alpha_min <- results_k10$alpha[which.min(results_k10$cvm_min)] # 0.72
+best_alpha_1se <- results_k10$alpha[which.min(results_k10$cvm_1se)] # 0.69
+
+# extract lambda when alpha=0.72
+k10_lambda_min <- results_k10$lambda_min[a]
+k10_lambda_1se <- results_k10$lambda_1se
+
+# Fit final models
+enet_model_min <- glmnet(X_train_scaled, y_train, 
+                         alpha = 0.5, 
+                         lambda = enet_lambda_min)
+
+enet_model_1se <- glmnet(X_train_scaled, y_train, 
+                         alpha = 0.5, 
+                         lambda = enet_lambda_1se)
+
+
+
+
+
+
+
+## with k=20 ###
+
+results_k20 <- data.frame()
+
+# Perform grid search, this will test all teh values of alpha then we'll be able to see which one was best
+for (alpha_val in alpha_grid) {
+  # Cross-validation for current alpha
+  cv_model <- cv.glmnet(X_train_scaled, y_train, 
+                        alpha = alpha_val, 
+                        nfolds = 20,
+                        type.measure = "auc", # either auc or deviance, not sure the difference
+                        keep = TRUE,
+                        family = "binomial")
+  
+  # Store results
+  results_k20 <- rbind(results_k20, data.frame(
+    alpha = alpha_val,
+    lambda_min = cv_model$lambda.min,
+    lambda_1se = cv_model$lambda.1se,
+    cvm_min = min(cv_model$cvm),
+    cvm_1se = cv_model$cvm[which(cv_model$lambda == cv_model$lambda.1se)],
+    nzero_min = cv_model$nzero[which(cv_model$lambda == cv_model$lambda.min)],
+    nzero_1se = cv_model$nzero[which(cv_model$lambda == cv_model$lambda.1se)]
+  ))
+}
+
+# Print results
+print(results_k20)
+
+# Find best alpha based on minimum CV error
+best_alpha_min <- results_k20$alpha[which.min(results_k20$cvm_min)] # 0.08
+best_alpha_1se <- results_k20$alpha[which.min(results_k20$cvm_1se)] # 0.05
+
+
+
+## extract top predictors
+# Function to extract top N predictors from a model
+extract_top_predictors <- function(model, n = 10, lambda_type = "min") {
+  # Get coefficients
+  if (lambda_type == "min") {
+    coefs <- as.matrix(coef(model))[, 1]
+  } else {
+    # For models stored differently
+    coefs <- as.matrix(coef(model, s = paste0("lambda.", lambda_type)))[, 1]
+  }
+  
+  # Remove intercept
+  coefs_no_intercept <- coefs[-1]
+  
+  # Get absolute values for ranking
+  abs_coefs <- abs(coefs_no_intercept)
+  
+  # Get top N predictors
+  top_indices <- order(abs_coefs, decreasing = TRUE)[1:min(n, length(abs_coefs))]
+  
+  # Create result data frame
+  result <- data.frame(
+    Predictor = names(coefs_no_intercept)[top_indices],
+    Coefficient = coefs_no_intercept[top_indices],
+    Absolute_Effect = abs_coefs[top_indices],
+    Rank = 1:length(top_indices)
+  )
+  
+  return(result)
+}
+
+```
+
+
+To see which are the top predictors:
+look at section 5 in regularisation methods comparison.R
+
+```{r}
+
+```
+
+
+
+
