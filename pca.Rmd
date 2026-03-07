@@ -361,8 +361,27 @@ enet_model_1se <- glmnet(X_train_scaled, y_train,
                          alpha = 0.5, 
                          lambda = enet_lambda_1se)
 
+# Fitted values and test set predictions
+prds.train <- predict(enet_model_min,newx = X_train_scaled, type = "response", s=enet_lambda_min)[,1]
+prds.test <- predict(enet_model_min,newx = X_test_scaled, type = "response", s=enet_lambda_min)[,1]
 
+# Prediction Accuracy
 
+library(pROC)
+auc.train <- roc(y_train,prds.train)
+auc.train
+
+auc.test <- roc(y_test,prds.test)
+auc.test
+
+par(mfrow=c(1,2))
+
+par(mfrow=c(1,2))
+
+plot(auc.train)
+plot(auc.test)
+
+par(mfrow=c(1,1))
 
 
 
@@ -442,6 +461,7 @@ look at section 5 in regularisation methods comparison.R
 ```{r}
 
 ```
+
 
 
 
