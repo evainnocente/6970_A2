@@ -8,29 +8,40 @@ BINF 6970 Assignment 2:
 1- Perform PCA on this dataset treating differentially expressed genes as the variables.
 
 ```{r}
+# Load in file
 load("geneexpression2.rda")
 dat
 
+# Load in libraries
+library(tidyverse)
+library(ggfortify)
+library(dplyr)
+
 ## EDA
 str(dat)
-dim(dat)
+dim(dat) # 30 rows (patient samples) and 156 columns (differentially expressed genes)
 
-# any NAs?
-sum(is.na(dat))
+# Check for NAs in file
+sum(is.na(dat)) # 0 NA values in the dataset
 
 # create column of type of cell/status for plotting
-library(dplyr)
-library(tidyverse)
 dat_name <- dat %>%
   rownames_to_column(var = "cell_type")
+
+#Check if cell type column is added 
+str(dat_name) 
+dat_name$cell_type # cell type is present
 
 dat_name <- dat %>%
   rownames_to_column(var = "cell_type") %>%
   mutate(status = case_when(cell_type(starts_with("HEA"))))
 
-
+#Grouping on cell stage and health status based on the information in the cell type data.
 dat_name <- dat_name %>%
   mutate(status = case_when(str_starts(cell_type, "HEA") ~ "healthy", str_starts(cell_type, "MEL") ~ "melanoma"), type = case_when(str_detect(cell_type, "EFFE") ~ "effector", str_detect(cell_type, "MEM") ~ "memory", str_detect(cell_type, "NAI") ~ "naive"))
+
+table(dat_name$status) #15 healthy, 15 melanonma, total of 30
+table(dat_name$type) # 10 effector, 9 memory, 11 naive for a total of 30 samples
 
 dat_name %>%
   group_by(cell_type) %>%
@@ -44,17 +55,16 @@ pc_data_scaled <- prcomp(dat, scale. = T)
 
 plot(pc_data)
 
-summary(pc_data)
+#Checks the variance explained by each PC
+summary(pc_data)[["importance"]]["Proportion of Variance",]
 
 ## Plotting scree plot and PC plot
-
-library(ggfortify)
-
 # plot all 
 autoplot(prcomp(dat), data = dat_name, colour="type", label = F, label.size = 3, size = 3, shape = "status") + theme_minimal()+labs(colour = "Cell Type", shape = "Status")  
 
 ## screeplot
-plot(as.ts(pc_data$sdev^2))
+plot(as.ts(pc_data$sdev^2)) +
+axis(side = 1, at = seq(1, 30, by = 1), labels = FALSE) # adds ticks for x-axis
 
 autoplot(prcomp(dat), data = dat_name, colour="status", label = F, label.size = 3, point.size= 5) + theme_minimal()+scale_colour_discrete(name="Status")
 
@@ -461,6 +471,7 @@ look at section 5 in regularisation methods comparison.R
 ```{r}
 
 ```
+
 
 
 
