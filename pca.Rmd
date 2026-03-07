@@ -3,7 +3,7 @@ title: "R Notebook"
 output: html_notebook
 ---
 
-Assignment 2:
+BINF 6970 Assignment 2:
 
 1- Perform PCA on this dataset treating differentially expressed genes as the variables.
 
@@ -11,7 +11,7 @@ Assignment 2:
 load("geneexpression2.rda")
 dat
 
-## EDA??
+## EDA
 str(dat)
 dim(dat)
 
@@ -461,6 +461,7 @@ look at section 5 in regularisation methods comparison.R
 ```{r}
 
 ```
+
 
 
 
