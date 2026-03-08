@@ -326,7 +326,7 @@ X_test_scaled <- scale(X_test,
 
 
 
-# Perform grid search, this will test all teh values of alpha then we'll be able to see which one was best
+# Perform grid search, this will test all the values of alpha then we'll be able to see which one was best
 for (alpha_val in alpha_grid) {
   # Cross-validation for current alpha
   cv_model <- cv.glmnet(X_train_scaled, y_train, 
@@ -403,7 +403,7 @@ par(mfrow=c(1,1))
 
 results_k20 <- data.frame()
 
-# Perform grid search, this will test all teh values of alpha then we'll be able to see which one was best
+# Perform grid search, this will test all the values of alpha then we'll be able to see which one was best
 for (alpha_val in alpha_grid) {
   # Cross-validation for current alpha
   cv_model <- cv.glmnet(X_train_scaled, y_train, 
@@ -474,6 +474,7 @@ look at section 5 in regularisation methods comparison.R
 ```{r}
 
 ```
+
 
 
 
