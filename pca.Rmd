@@ -366,6 +366,17 @@ k10_lambda_min <- results_k10$lambda_min[a]
 k10_lambda_1se <- results_k10$lambda_1se
 
 # Fit final models
+# Not sure if this is right??? but fitting final model with best alpha and associated lambda values
+enet_model_min <- glmnet(X_train_scaled, y_train, 
+                         alpha = best_alpha_min, 
+                         lambda = lambda_min,
+                         family = "binomial")
+
+enet_model_1se <- glmnet(X_train_scaled, y_train, 
+                         alpha = best_alpha_1se, 
+                         lambda = lambda_1se,
+                         family = "binomial")
+
 enet_model_min <- glmnet(X_train_scaled, y_train, 
                          alpha = 0.5, 
                          lambda = enet_lambda_min)
@@ -432,7 +443,21 @@ print(results_k20)
 best_alpha_min <- results_k20$alpha[which.min(results_k20$cvm_min)] # 0.08
 best_alpha_1se <- results_k20$alpha[which.min(results_k20$cvm_1se)] # 0.05
 
+#Extract best lambda 
+lambda_min_k20 <- results_k20$lambda_min[results_k20$alpha == best_alpha_min_k20] #0.0477
+lambda_1se_k20 <- results_k20$lambda_1se[results_k20$alpha == best_alpha_1se_k20] #0.2110
 
+# Fit best model using glmnet, type.measure is not needed here right? not seen in R documentation
+# Fit final models kfold 20
+enet_model_min_k20 <- glmnet(X_train_scaled, y_train, 
+                         alpha = best_alpha_min_k20, 
+                         lambda = lambda_min_k20,
+                         family = "binomial")
+
+enet_model_1se_k20 <- glmnet(X_train_scaled, y_train, 
+                         alpha = best_alpha_1se_k20, 
+                         lambda = lambda_1se_k20,
+                         family = "binomial")
 
 ## extract top predictors
 # Function to extract top N predictors from a model
@@ -465,6 +490,25 @@ extract_top_predictors <- function(model, n = 10, lambda_type = "min") {
   return(result)
 }
 
+# Extract top predictors for each model
+cat("\n--- Top 10 Predictors (Lambda.min) ---\n")
+
+#For k fold 10
+cat("\nElastic Net (lambda.min):\n")
+enet_top_min <- extract_top_predictors(enet_model_min, n = 10, lambda_type = "min")
+print(enet_top_min)
+
+cat("\nElastic Net (lambda.1se):\n")
+enet_top_1se <- extract_top_predictors(enet_model_1se, n = 10, lambda_type = "min")
+print(enet_top_1se)
+
+#For kfold 20
+enet_top_min_k20 <- extract_top_predictors(enet_model_min_k20, n = 10, lambda_type = "min")
+print(enet_top_min_k20)
+
+enet_top_1se_k20 <- extract_top_predictors(enet_model_1se_k20, n = 10, lambda_type = "min")
+print(enet_top_1se_k20)
+
 ```
 
 
@@ -474,6 +518,7 @@ look at section 5 in regularisation methods comparison.R
 ```{r}
 
 ```
+
 
 
 
