@@ -359,6 +359,9 @@ best_alpha_min <- results_k10$alpha[which.min(results_k10$cvm_min)] # 0.72
 best_alpha_1se <- results_k10$alpha[which.min(results_k10$cvm_1se)] # 0.69
 
 # extract lambda when alpha=0.72
+lambda_min <- results_kfold_10$lambda_min[results_kfold_10$alpha == best_alpha_min]
+lambda_1se <- results_kfold_10$lambda_1se[results_kfold_10$alpha == best_alpha_1se]
+
 k10_lambda_min <- results_k10$lambda_min[a]
 k10_lambda_1se <- results_k10$lambda_1se
 
@@ -471,6 +474,7 @@ look at section 5 in regularisation methods comparison.R
 ```{r}
 
 ```
+
 
 
 
