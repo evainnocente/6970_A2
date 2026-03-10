@@ -32,10 +32,6 @@ dat_name <- dat %>%
 str(dat_name) 
 dat_name$cell_type # cell type is present
 
-dat_name <- dat %>%
-  rownames_to_column(var = "cell_type") %>%
-  mutate(status = case_when(cell_type(starts_with("HEA"))))
-
 #Grouping on cell stage and health status based on the information in the cell type data.
 dat_name <- dat_name %>%
   mutate(status = case_when(str_starts(cell_type, "HEA") ~ "healthy", str_starts(cell_type, "MEL") ~ "melanoma"), type = case_when(str_detect(cell_type, "EFFE") ~ "effector", str_detect(cell_type, "MEM") ~ "memory", str_detect(cell_type, "NAI") ~ "naive"))
@@ -51,7 +47,7 @@ dat_name %>%
 
 pc_data <- prcomp(dat) #, cor = F, scores = T) ## should we scale data?
 
-pc_data_scaled <- prcomp(dat, scale. = T)
+pc_data_scaled <- prcomp(dat, scale. = T) ## prcomp has center = TRUE as default, which we will leave as the default
 
 plot(pc_data)
 
@@ -66,22 +62,17 @@ autoplot(prcomp(dat), data = dat_name, colour="type", label = F, label.size = 3,
 plot(as.ts(pc_data$sdev^2)) +
 axis(side = 1, at = seq(1, 30, by = 1), labels = FALSE) # adds ticks for x-axis
 
-autoplot(prcomp(dat), data = dat_name, colour="status", label = F, label.size = 3, point.size= 5) + theme_minimal()+scale_colour_discrete(name="Status")
+##  PCA Plot - no scaling
+autoplot(prcomp(dat, scale. = T), data = dat_name, colour="status", label = F, label.size = 3, point.size= 5) + theme_minimal()+scale_colour_discrete(name="Status")
 
-## No scaling because every predictor is in same unit + DE data should be already scaled 
-## Plot scaled 
-autoplot(prcomp(dat, scale. = T), data = dat_name, colour="type", label = F, label.size = 3, size = 3, shape = "status") + theme_minimal()+labs(colour = "Cell Type", shape = "Status")  
+## PCA Plot scaled 
+pca_plot_labels <- colnames(dat_name)[str_starts(colnames(dat_name), "X")]
+autoplot(prcomp(dat, scale. = T), data = dat_name, colour="type", label = pca_plot_labels, label.size = 3, size = 3, shape = "status") + theme_minimal()+labs(colour = "Cell Type", shape = "Status")  
 
-## need to separate by T cell type and status- not sure exactly what this is
-
-# Status= HEA -healthy and MEL=melanoma
-
-# separate columns
-
-
-
-
-
+## Extract loadings
+loadings <- pc_data_scaled$rotation
+pc1_genes <- sort(abs(loadings[,1]), decreasing = TRUE)
+head(pc1_genes, 10)
 
 ```
 
