@@ -72,15 +72,15 @@ summary(pc_data_scaled)[["importance"]]["Proportion of Variance",]
 # Scaled PCA plot with cell type and health status 
 pca_plot_type_status <- autoplot(prcomp(dat, scale. = T), data = dat_name, colour = "type", shape = "status", size = 3) +
   theme_minimal() +
-  labs(colour = "Cell Type", shape = "Status")
+  labs(colour = "Cell Type", shape = "Status", title = "C")
 
 pca_plot_type <- autoplot(prcomp(dat, scale. = T), data = dat_name, colour = "type", size = 3) +
   theme_minimal() + 
-  labs(colour = "Cell Type")
+  labs(colour = "Cell Type", title = "A")
 
 pca_plot_status <- autoplot(prcomp(dat, scale. = T), data = dat_name, shape = "status", size = 3) +
   theme_minimal() + 
-  labs(colour = "Status")
+  labs(shape = "Status", title = "B")
 
 pca_plot_combined <- (pca_plot_type | pca_plot_status) / pca_plot_type_status
 pca_plot_combined
