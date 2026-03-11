@@ -325,16 +325,19 @@ table(as.numeric(prds.train_k10>.5))
 conf.mat_k10 <- table(y=y_train,yhat=as.numeric(prds.train_k10>.5))
 conf.mat_k10
 
-sn.sp <- function(mat){
+## A function to compute Sensitivity, Specificity, and accuracy
+sn.sp.acc <- function(mat){
   sn <- round(mat[2,2]/sum(mat[2,]),3)
   sp <- round(mat[1,1]/sum(mat[1,]),3)
-  return(unlist(list(sensitivity=sn, specificity=sp)))
+  acc <- round((mat[1,1] + mat[2,2]) / sum(mat), 3)
+  return(unlist(list(sensitivity=sn, specificity=sp, accuracy=acc)))
 }
 
-sn.sp(conf.mat_k10)
+sn.sp.acc(conf.mat_k10)
 # this was for threshold 0.5
 #sensitivity 0.792
 #specificity 0.909
+#accuracy 0.930
 
 # Need to find threshold to balance between sensitivity and specificity
 # function to find threshold
@@ -356,17 +359,17 @@ cutoff
 #Confusion matrix for new cutoff value
 table(y=y_train,yhat=as.numeric(prds.train_k10>cutoff))
 sn.sp(table(y=y_train,yhat=as.numeric(prds.train_k10>cutoff))) ## TRAIN SET
-#sensitivity specificity 
-#     0.970       0.917 
+#sensitivity specificity accuracy 
+#     0.970       0.917     0.947
       
 # For testing set
 cutoff_test <- threshold(auc.test_k10)
 
 #Confusion matrix table for new cutoff
 table(y=y_test,yhat=as.numeric(prds.test_k10>cutoff_test))
-sn.sp(table(y=y_test,yhat=as.numeric(prds.test_k10>cutoff_test))) ## TEST SET
-#sensitivity specificity 
-#      0.818       0.750 
+sn.sp.acc(table(y=y_test,yhat=as.numeric(prds.test_k10>cutoff_test))) ## TEST SET
+#sensitivity specificity  accuracy
+#      0.818       0.750     0.789
 ```
 
 ```{r}
@@ -378,8 +381,8 @@ cutoff_train_1se <- threshold(auc.train_k10_1se)
 #Confusion matrix for new cutoff value
 table(y=y_train,yhat=as.numeric(prds_train_1se>cutoff_train_1se))
 sn.sp(table(y=y_train,yhat=as.numeric(prds.train_k10>cutoff_train_1se))) ## TRAIN SET
-# sensitivity specificity 
-#      0.879       0.917 
+# sensitivity specificity    accuracy 
+#      0.879       0.917       0.895 
       
 # For testing set
 ## finding the threshold
@@ -388,8 +391,8 @@ cutoff_test_1se <- threshold(auc.test_k10_1se)
 #Confusion matrix table for new cutoff
 table(y=y_test,yhat=as.numeric(prds.test_k10>cutoff_test_1se))
 sn.sp(table(y=y_test,yhat=as.numeric(prds.test_k10>cutoff_test_1se))) ## TEST SET
-#sensitivity specificity 
-#      0.818       0.750
+#sensitivity specificity    accuracy 
+#      0.636       0.750       0.684 
 
 ```
 
@@ -454,6 +457,9 @@ enet_model_1se_k20 <- glmnet(X_train_scaled, y_train,
 prds.train_k20 <- predict(enet_model_min_k20,newx = X_train_scaled, type = "response", s=lambda_min_k20)[,1]
 prds.test_k20 <- predict(enet_model_min_k20,newx = X_test_scaled, type = "response", s=lambda_min_k20)[,1]
 
+prds.train_k20_1se <- predict(enet_model_1se_k20,newx = X_train_scaled, type = "response", s=lambda_1se_k20)[,1]
+prds.test_k20_1se <- predict(enet_model_1se_k20,newx = X_test_scaled, type = "response", s=lambda_1se_k20)[,1]
+
 # Prediction Accuracy
 auc.train_k20 <- roc(y_train,prds.train_k20)
 auc.train_k20 #0.9129
@@ -461,13 +467,24 @@ auc.train_k20 #0.9129
 auc.test_k20 <- roc(y_test,prds.test_k20)
 auc.test_k20 #0.8295
 
+auc.train_k20_1se <- roc(y_train, prds.train_k20_1se)
+auc.train_k20_1se #0.9053
+
+auc.test_k20_1se <- roc(y_test, prds.test_k20_1se)
+auc.test_k20_1se #0.7614
 ```
+
 ```{r}
 par(mfrow=c(1,2))
 
 plot(auc.train_k20)
 plot(auc.test_k20)
+
+par(mfrow=c(1,2))
+plot(auc.train_k20_1se)
+plot(auc.test_k20_1se)
 ```
+
 ```{r}
 # Confusion matrix
 table(y_test) 
@@ -476,10 +493,11 @@ table(as.numeric(prds.train_k20>.5))
 conf.mat_k20 <- table(y=y_train,yhat=as.numeric(prds.train_k20>.5))
 conf.mat_k20
 
-sn.sp <- function(mat){
+sn.sp.acc <- function(mat){
   sn <- round(mat[2,2]/sum(mat[2,]),3)
   sp <- round(mat[1,1]/sum(mat[1,]),3)
-  return(unlist(list(sensitivity=sn, specificity=sp)))
+  acc <- round((mat[1,1] + mat[2,2]) / sum(mat), 3)
+  return(unlist(list(sensitivity=sn, specificity=sp, accuracy=acc)))
 }
 
 sn.sp(conf.mat_k20)
@@ -499,6 +517,52 @@ indx
 cutoff <- auc.train_k10$thresholds[indx]
 cutoff 
 
+```
+
+```{r}
+# Confusion matrix for k20 lambda min
+# Need to balance between sensitivity and specificity
+# for training
+cutoff_train_k20_min <- threshold(auc.train_k20)
+
+#Confusion matrix for new cutoff value
+table(y=y_train,yhat=as.numeric(prds.train_k20>cutoff_train_k20_min))
+sn.sp.acc(table(y=y_train,yhat=as.numeric(prds.train_k20>cutoff_train_k20_min))) ## TRAIN SET
+# sensitivity specificity    accuracy 
+#      0.939       0.917        0.930
+      
+# For testing set
+## finding the threshold
+cutoff_test_k20_min <- threshold(auc.test_k20)
+
+#Confusion matrix table for new cutoff
+table(y=y_test,yhat=as.numeric(prds.test_k20>cutoff_test_k20_min))
+sn.sp.acc(table(y=y_test,yhat=as.numeric(prds.test_k20>cutoff_test_k20_min))) ## TEST SET
+#sensitivity specificity    accuracy 
+#      0.818       0.750       0.789
+```
+
+```{r}
+# Confusion matrix for k20 lambda 1se
+# Need to balance between sensitivity and specificity
+# for training
+cutoff_train_k20_1se <- threshold(auc.train_k20_1se)
+
+#Confusion matrix for new cutoff value
+table(y=y_train,yhat=as.numeric(prds.train_k20_1se>cutoff_train_k20_1se))
+sn.sp.acc(table(y=y_train,yhat=as.numeric(prds.train_k20_1se>cutoff_train_k20_1se))) ## TRAIN SET
+#sensitivity specificity    accuracy 
+#      0.879       0.917       0.895 
+      
+# For testing set
+## finding the threshold
+cutoff_test_k20_1se <- threshold(auc.test_k20_1se)
+
+#Confusion matrix table for new cutoff
+table(y=y_test,yhat=as.numeric(prds.test_k20_1se>cutoff_test_k20_1se))
+sn.sp.acc(table(y=y_test,yhat=as.numeric(prds.test_k20_1se>cutoff_test_k20_1se))) ## TEST SET
+#sensitivity specificity    accuracy 
+#      0.636       0.750       0.684
 ```
 
 ```{r}
