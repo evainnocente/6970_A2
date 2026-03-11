@@ -108,159 +108,26 @@ ie which are the top predictors?
 3. How does patient age correlate with COVID-19 disease severity?
 
 ```{r}
-library(lars)       # For diabetes dataset
 library(glmnet)     # For regularization methods
 library(caret)      # For data splitting and preprocessing
 library(ggplot2)    # For visualization
 library(dplyr)      # For data manipulation
-
-# Set seed for reproducibility
-set.seed(1717)
-
-# Load data
-
-
-# Check dimensions
-cat("Dataset dimensions:", dim(X), "\n")
-cat("Number of predictors:", ncol(X), "\n")
-cat("Number of observations:", length(y), "\n")
-
-# Split data into training (75%) and testing (25%) # how to randomly split?
-train_index <- createDataPartition(y, p = 0.75, list = FALSE)
-X_train <- X[train_index, ]
-X_test <- X[-train_index, ]
-y_train <- y[train_index]
-y_test <- y[-train_index]
-
-# Standardize predictors (glmnet does this by default with standardize=TRUE)
-# But we'll scale manually for consistency across methods
-X_train_scaled <- scale(X_train)
-X_test_scaled <- scale(X_test, 
-                       center = attr(X_train_scaled, "scaled:center"),
-                       scale = attr(X_train_scaled, "scaled:scale"))
-
-# Remove any columns with NA values (if scaling creates them due to zero variance)
-na_cols <- which(colSums(is.na(X_train_scaled)) > 0)
-if (length(na_cols) > 0) {
-  X_train_scaled <- X_train_scaled[, -na_cols]
-  X_test_scaled <- X_test_scaled[, -na_cols]
-  cat("Removed", length(na_cols), "columns with zero variance\n")
-}
-
-# now do the elasticnet
-
-# Cross-validation for elastic net with alpha=0.5
-cv_enet <- cv.glmnet(X_train_scaled, y_train, 
-                     alpha = 0.5, 
-                     nfolds = 10,
-                     type.measure = "mse")
-
-plot(cv_enet, main = "Elastic Net (alpha=0.5) - CV Error")
-# how many predictor left?
-# Extract lambda values
-enet_lambda_min <- cv_enet$lambda.min
-enet_lambda_1se <- cv_enet$lambda.1se
-
-cat("Elastic Net - Lambda min:", enet_lambda_min, "\n")
-cat("Elastic Net - Lambda 1se:", enet_lambda_1se, "\n")
-
-# Fit final models
-enet_model_min <- glmnet(X_train_scaled, y_train, 
-                         alpha = 0.5, 
-                         lambda = enet_lambda_min)
-
-enet_model_1se <- glmnet(X_train_scaled, y_train, 
-                         alpha = 0.5, 
-                         lambda = enet_lambda_1se)
-
-
+library(pROC)       # For ROC calculations
+library(patchwork)  # For combining plots
 ```
-
-
 
 2- For model evaluation, randomly split the full dataset into a 75% training set and a 25% test
 set (use seed: 1717 for reproducibility).
-
 
 3- For model training, use seq (0, 1, .01) as the search grid for alpha, i.e. Ridge and
 Lasso are included in the set of candidate elastic-net models. You may choose to use either
 “auc” or “deviance” as the accuracy measure (loss function) in cv.glmnet at the training
 stage (only use one of these two measure).
 
-grid search:
-
-```{r}
-alpha_grid <- seq(0, 1, by = 0.01)
-
-# Create container for results
-results <- data.frame()
-
-# Perform grid search
-for (alpha_val in alpha_grid) {
-  # Cross-validation for current alpha
-  cv_model <- cv.glmnet(X_train_scaled, y_train, 
-                        alpha = alpha_val, 
-                        nfolds = 10,
-                        type.measure = "mse",
-                        keep = TRUE)
-  
-  # Store results
-  results <- rbind(results, data.frame(
-    alpha = alpha_val,
-    lambda_min = cv_model$lambda.min,
-    lambda_1se = cv_model$lambda.1se,
-    cvm_min = min(cv_model$cvm),
-    cvm_1se = cv_model$cvm[which(cv_model$lambda == cv_model$lambda.1se)],
-    nzero_min = cv_model$nzero[which(cv_model$lambda == cv_model$lambda.min)],
-    nzero_1se = cv_model$nzero[which(cv_model$lambda == cv_model$lambda.1se)]
-  ))
-}
-
-# Print results
-print(results)
-
-# Find best alpha based on minimum CV error
-best_alpha_min <- results$alpha[which.min(results$cvm_min)]
-best_alpha_1se <- results$alpha[which.min(results$cvm_1se)]
-
-cat("\nBest alpha (lambda.min):", best_alpha_min, "\n")
-cat("Best alpha (lambda.1se):", best_alpha_1se, "\n")
-
-# Visualize alpha grid search
-ggplot(results, aes(x = alpha)) +
-  geom_line(aes(y = cvm_min, color = "lambda.min"), size = 1.2) +
-  geom_line(aes(y = cvm_1se, color = "lambda.1se"), size = 1.2) +
-  geom_point(aes(y = cvm_min, color = "lambda.min"), size = 3) +
-  geom_point(aes(y = cvm_1se, color = "lambda.1se"), size = 3) +
-  labs(title = "CV Error vs Alpha",
-       x = "Alpha (0=Ridge, 1=Lasso)",
-       y = "CV Error (MSE)",
-       color = "Lambda Type") +
-  theme_minimal()
-```
-
-
 4- Perform two separate sets of analysis by considering 10-fold and 20-fold cross-validation.
-cv_enet <- cv.glmnet(X_train_scaled, y_train, 
-                     alpha = 0.5, 
-                     nfolds = 10,
-                     type.measure = "mse")
-
-cv_enet <- cv.glmnet(X_train_scaled, y_train, 
-                     alpha = 0.5, 
-                     nfolds = 20,
-                     type.measure = "mse")
-
 
 5- Discuss the implications of cross-validation schemes (10/20 folds) on your analyses by
 providing a clear and concise comparison of model selection and predictive performance.
-
-```{r}
-
-```
-
-
-
 
 Full workflow:
 
@@ -268,27 +135,33 @@ Full workflow:
 # Setting the seed
 set.seed(1717)
 
-# Load data
+covid_data <- Immunologic_profiles_of_patients_with_COVID_19
 
+# Load data
 covid_data <- read.csv("covid.csv")
 
 sum(is.na(covid_data))
 
 # Convert y to a binary variable where 0= mild and 1= severe
 covid_data <- covid_data %>%
-  mutate(severity_binary = as.factor(case_when(Severirty == "Mild" ~ 0, Severirty == "Severe" ~ 1)))
+  mutate(severity_binary = as.factor(case_when(Severirty == "Mild" ~ 1, Severirty == "Severe" ~ 0)))
+
+covid_data <- covid_data %>%
+  mutate(response = as.factor(ifelse(covid_data$Severirty =="Severe", 0, 1)))
 
 class(covid_data$severity_binary)
+class(covid_data$response)
 
 # Separate into x and y
-
 X <- as.matrix(covid_data[c(2, 5:32)])  # Predictors (expanded features)= everything but patient number and severity obviously # also omit sex
 y <- covid_data$severity_binary # Response= severity
+y <- covid_data$response # Response= severity
 class(y)
 
+# Setting the seed
+set.seed(1717)
 
 # Creating the test and training set, X is all the predictors and y is the response
-
 train_index <- createDataPartition(y, p = 0.75, list = FALSE) # how to split randomly?- i think its built in
 X_train <- X[train_index, ]
 X_test <- X[-train_index, ]
@@ -297,17 +170,14 @@ y_test <- y[-train_index]
 
 class(y_train)
 str(y_train)
-# Now do the grid search for the best alpha
+```
 
-## first we do it with k=10 folds
+```{r}
+plot(as.ts(apply(X,2,sd)), xlab="covariate", ylab="sd")
+# predictors need to be scaled 
+```
 
-alpha_grid <- seq(0, 1, by = 0.01) # as specified
-
-# Create container for results
-results_k10 <- data.frame()
-
-# manually standardise predictors
-
+```{r}
 # Standardize predictors (glmnet does this by default with standardize=TRUE)
 # But we'll scale manually for consistency across methods
 X_train_scaled <- scale(X_train)
@@ -316,99 +186,113 @@ X_test_scaled <- scale(X_test,
                        scale = attr(X_train_scaled, "scaled:scale"))
 
 
+# Now do the grid search for the best alpha
+alpha_grid <- seq(0, 1, by = 0.01) # as specified
+
+# Cross-validation
+## using k=10 folds
+# Create container for results
+results_k10 <- data.frame()
 
 # Perform grid search, this will test all the values of alpha then we'll be able to see which one was best
 for (alpha_val in alpha_grid) {
   # Cross-validation for current alpha
-  cv_model <- cv.glmnet(X_train_scaled, y_train, 
+  cv_model_k10 <- cv.glmnet(X_train_scaled, y_train, 
                         alpha = alpha_val, 
                         nfolds = 10,
                         type.measure = "auc", # using AUC for logistic
                         keep = TRUE,
                         family="binomial")
-                         # instead of manually
   
   # Store results
   results_k10 <- rbind(results_k10, data.frame(
     alpha = alpha_val,
-    lambda_min = cv_model$lambda.min,
-    lambda_1se = cv_model$lambda.1se,
-    cvm_min = min(cv_model$cvm),
-    cvm_1se = cv_model$cvm[which(cv_model$lambda == cv_model$lambda.1se)],
-    nzero_min = cv_model$nzero[which(cv_model$lambda == cv_model$lambda.min)],
-    nzero_1se = cv_model$nzero[which(cv_model$lambda == cv_model$lambda.1se)]
+    lambda_min = cv_model_k10$lambda.min,
+    lambda_1se = cv_model_k10$lambda.1se,
+    cvm_min = min(cv_model_k10$cvm),
+    cvm_1se = cv_model_k10$cvm[which(cv_model_k10$lambda == cv_model_k10$lambda.1se)],
+    nzero_min = cv_model_k10$nzero[which(cv_model_k10$lambda == cv_model_k10$lambda.min)],
+    nzero_1se = cv_model_k10$nzero[which(cv_model_k10$lambda == cv_model_k10$lambda.1se)]
   ))
 }
 
-# error Warning: Too few (< 10) observations per fold for type.measure='auc' in cv.lognet; changed to type.measure='deviance'. Alternatively, use smaller value for nfolds
 
+# error Warning: Too few (< 10) observations per fold for type.measure='auc' in cv.lognet; changed to type.measure='deviance'. Alternatively, use smaller value for nfolds
+```
+
+```{r}
+# Plot
+plot(cv_model_k10)
+```
+
+```{r}
 # Print results
 print(results_k10)
 
 # Find best alpha based on minimum CV error
-best_alpha_min <- results_k10$alpha[which.min(results_k10$cvm_min)] # 0.72
-best_alpha_1se <- results_k10$alpha[which.min(results_k10$cvm_1se)] # 0.69
+best_alpha_min_k10 <- results_k10$alpha[which.min(results_k10$cvm_min)] # 0.68
+best_alpha_1se_k10 <- results_k10$alpha[which.min(results_k10$cvm_1se)] # 0
 
-# extract lambda when alpha=0.72
-lambda_min <- results_kfold_10$lambda_min[results_kfold_10$alpha == best_alpha_min]
-lambda_1se <- results_kfold_10$lambda_1se[results_kfold_10$alpha == best_alpha_1se]
-
-k10_lambda_min <- results_k10$lambda_min[a]
-k10_lambda_1se <- results_k10$lambda_1se
+# extract lambda
+lambda_min_k10 <- results_k10$lambda_min[results_k10$alpha == best_alpha_min_k10]
+lambda_1se_k10 <- results_k10$lambda_1se[results_k10$alpha == best_alpha_1se_k10]
 
 # Fit final models
-# Not sure if this is right??? but fitting final model with best alpha and associated lambda values
-enet_model_min <- glmnet(X_train_scaled, y_train, 
-                         alpha = best_alpha_min, 
-                         lambda = lambda_min,
-                         family = "binomial")
+enet_model_min_k10 <- glmnet(X_train_scaled, y_train, 
+                         alpha = best_alpha_min_k10, 
+                         lambda = lambda_min_k10,
+                         family = "binomial",
+                         keep = "TRUE")
 
-enet_model_1se <- glmnet(X_train_scaled, y_train, 
-                         alpha = best_alpha_1se, 
-                         lambda = lambda_1se,
-                         family = "binomial")
-
-enet_model_min <- glmnet(X_train_scaled, y_train, 
-                         alpha = 0.5, 
-                         lambda = enet_lambda_min)
-
-enet_model_1se <- glmnet(X_train_scaled, y_train, 
-                         alpha = 0.5, 
-                         lambda = enet_lambda_1se)
+enet_model_1se_k10 <- glmnet(X_train_scaled, y_train, 
+                         alpha = best_alpha_1se_k10, 
+                         lambda = lambda_1se_k10,
+                         family = "binomial",
+                         keep = "TRUE")
 
 # Fitted values and test set predictions
-prds.train <- predict(enet_model_min,newx = X_train_scaled, type = "response", s=enet_lambda_min)[,1]
-prds.test <- predict(enet_model_min,newx = X_test_scaled, type = "response", s=enet_lambda_min)[,1]
+prds.train_k10 <- predict(enet_model_min_k10,newx = X_train_scaled, type = "response", s=lambda_min_k10)[,1]
+prds.test_k10 <- predict(enet_model_min_k10,newx = X_test_scaled, type = "response", s=lambda_min_k10)[,1]
 
 # Prediction Accuracy
+auc.train_k10 <- roc(y_train,prds.train_k10)
+auc.train_k10 #0.9129
 
-library(pROC)
-auc.train <- roc(y_train,prds.train)
-auc.train
-
-auc.test <- roc(y_test,prds.test)
-auc.test
-
+auc.test_k10 <- roc(y_test,prds.test_k10)
+auc.test_k10 #0.8295
+```
+```{r}
 par(mfrow=c(1,2))
 
-par(mfrow=c(1,2))
+plot(auc.train_k10)
+plot(auc.test_k10)
+```
 
-plot(auc.train)
-plot(auc.test)
+```{r}
+# Confusion matrix
+table(y_test) 
+table(as.numeric(prds.train_k10>.5))
 
-par(mfrow=c(1,1))
+conf.mat_k10 <- table(y=y_train,yhat=as.numeric(prds.train_k10>.5))
+conf.mat_k10
 
+sn.sp <- function(mat){
+  sn <- round(mat[2,2]/sum(mat[2,]),3)
+  sp <- round(mat[1,1]/sum(mat[1,]),3)
+  return(unlist(list(sensitivity=sn, specificity=sp)))
+}
 
-
+sn.sp(conf.mat_k10)
+#sensitivity 0.792
+#specificity 0.909
 
 ## with k=20 ###
-
 results_k20 <- data.frame()
 
 # Perform grid search, this will test all the values of alpha then we'll be able to see which one was best
 for (alpha_val in alpha_grid) {
   # Cross-validation for current alpha
-  cv_model <- cv.glmnet(X_train_scaled, y_train, 
+  cv_model_k20 <- cv.glmnet(X_train_scaled, y_train, 
                         alpha = alpha_val, 
                         nfolds = 20,
                         type.measure = "auc", # either auc or deviance, not sure the difference
@@ -418,38 +302,104 @@ for (alpha_val in alpha_grid) {
   # Store results
   results_k20 <- rbind(results_k20, data.frame(
     alpha = alpha_val,
-    lambda_min = cv_model$lambda.min,
-    lambda_1se = cv_model$lambda.1se,
-    cvm_min = min(cv_model$cvm),
-    cvm_1se = cv_model$cvm[which(cv_model$lambda == cv_model$lambda.1se)],
-    nzero_min = cv_model$nzero[which(cv_model$lambda == cv_model$lambda.min)],
-    nzero_1se = cv_model$nzero[which(cv_model$lambda == cv_model$lambda.1se)]
+    lambda_min = cv_model_k20$lambda.min,
+    lambda_1se = cv_model_k20$lambda.1se,
+    cvm_min = min(cv_model_k20$cvm),
+    cvm_1se = cv_model_k20$cvm[which(cv_model_k20$lambda == cv_model_k20$lambda.1se)],
+    nzero_min = cv_model_k20$nzero[which(cv_model_k20$lambda == cv_model_k20$lambda.min)],
+    nzero_1se = cv_model_k20$nzero[which(cv_model_k20$lambda == cv_model_k20$lambda.1se)]
   ))
 }
+```
 
+```{r}
+# Plot
+plot(cv_model_k20)
+```
+```{r}
 # Print results
 print(results_k20)
 
 # Find best alpha based on minimum CV error
-best_alpha_min <- results_k20$alpha[which.min(results_k20$cvm_min)] # 0.08
-best_alpha_1se <- results_k20$alpha[which.min(results_k20$cvm_1se)] # 0.05
+best_alpha_min_k20 <- results_k20$alpha[which.min(results_k20$cvm_min)] # 0.59
+best_alpha_1se_k20 <- results_k20$alpha[which.min(results_k20$cvm_1se)] # 0.01
 
 #Extract best lambda 
 lambda_min_k20 <- results_k20$lambda_min[results_k20$alpha == best_alpha_min_k20] #0.0477
 lambda_1se_k20 <- results_k20$lambda_1se[results_k20$alpha == best_alpha_1se_k20] #0.2110
 
-# Fit best model using glmnet, type.measure is not needed here right? not seen in R documentation
+# Fit best model using glmnet
 # Fit final models kfold 20
 enet_model_min_k20 <- glmnet(X_train_scaled, y_train, 
                          alpha = best_alpha_min_k20, 
                          lambda = lambda_min_k20,
-                         family = "binomial")
+                         family = "binomial",
+                         keep = "TRUE")
 
 enet_model_1se_k20 <- glmnet(X_train_scaled, y_train, 
                          alpha = best_alpha_1se_k20, 
                          lambda = lambda_1se_k20,
-                         family = "binomial")
+                         family = "binomial",
+                         keep = "TRUE")
 
+# Fitted values and test set predictions
+prds.train_k20 <- predict(enet_model_min_k20,newx = X_train_scaled, type = "response", s=lambda_min_k20)[,1]
+prds.test_k20 <- predict(enet_model_min_k20,newx = X_test_scaled, type = "response", s=lambda_min_k20)[,1]
+
+# Prediction Accuracy
+auc.train_k20 <- roc(y_train,prds.train_k20)
+auc.train_k20 #0.9129
+
+auc.test_k20 <- roc(y_test,prds.test_k20)
+auc.test_k20 #0.8295
+```
+```{r}
+par(mfrow=c(1,2))
+
+plot(auc.train_k20)
+plot(auc.test_k20)
+```
+```{r}
+# Confusion matrix
+table(y_test) 
+table(as.numeric(prds.train_k20>.5))
+
+conf.mat_k20 <- table(y=y_train,yhat=as.numeric(prds.train_k20>.5))
+conf.mat_k20
+
+sn.sp <- function(mat){
+  sn <- round(mat[2,2]/sum(mat[2,]),3)
+  sp <- round(mat[1,1]/sum(mat[1,]),3)
+  return(unlist(list(sensitivity=sn, specificity=sp)))
+}
+
+sn.sp(conf.mat_k20)
+#sensitivity 0.792
+#specificity 0.879
+```
+
+```{r}
+# Combine ROC plots to compare 10- and 20- fold cross validation
+p1 <- ggroc(auc.test_k10, col = "blue") + 
+  ggtitle(paste0("ROC Curve (10-fold CV)  AUC = ", round(auc(auc.test_k10),2)))
+
+p2 <- ggroc(auc.test_k20, col = "red") + 
+  ggtitle(paste0("ROC Curve (20-fold CV)  AUC = ", round(auc(auc.test_k20),2)))
+
+p1 + p2
+```
+
+```{r}
+p3 <- ggroc(auc.train_k10, col = "blue") + 
+  ggtitle(paste0("ROC Curve (10-fold CV)  AUC = ", round(auc(auc.train_k10),2)))
+
+p4 <- ggroc(auc.train_k20, col = "red") + 
+  ggtitle(paste0("ROC Curve (20-fold CV)  AUC = ", round(auc(auc.test_k20),2)))
+
+p3 + p4
+```
+
+```{r}
 ## extract top predictors
 # Function to extract top N predictors from a model
 extract_top_predictors <- function(model, n = 10, lambda_type = "min") {
@@ -502,20 +452,5 @@ print(enet_top_1se_k20)
 
 ```
 
-
 To see which are the top predictors:
 look at section 5 in regularisation methods comparison.R
-
-```{r}
-
-```
-
-
-
-
-
-
-
-
-
-
