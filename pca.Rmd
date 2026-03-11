@@ -165,15 +165,17 @@ covid_data <- Immunologic_profiles_of_patients_with_COVID_19
 # Load data
 covid_data <- read.csv("covid.csv")
 
-sum(is.na(covid_data))
+#Check fo NAs
+sum(is.na(covid_data)) # is 0
 
-# Convert y to a binary variable where 0= mild and 1= severe
+# Convert y to a binary variable (factor class) where 0= mild and 1= severe to 
 covid_data <- covid_data %>%
   mutate(severity_binary = as.factor(case_when(Severirty == "Mild" ~ 1, Severirty == "Severe" ~ 0)))
 
 covid_data <- covid_data %>%
   mutate(response = as.factor(ifelse(covid_data$Severirty =="Severe", 0, 1)))
 
+#Check for class type
 class(covid_data$severity_binary)
 class(covid_data$response)
 
@@ -193,6 +195,7 @@ X_test <- X[-train_index, ]
 y_train <- y[train_index]
 y_test <- y[-train_index]
 
+#Check for class 
 class(y_train)
 str(y_train)
 ```
@@ -210,6 +213,9 @@ X_test_scaled <- scale(X_test,
                        center = attr(X_train_scaled, "scaled:center"),
                        scale = attr(X_train_scaled, "scaled:scale"))
 
+#Check the plot again after scaling
+plot(as.ts(apply(X_train_scaled,2,sd)), xlab="covariate", ylab="sd") #SD is 1
+plot(as.ts(apply(X_test_scaled,2,sd)), xlab="covariate", ylab="sd") # SD flunctuates but is mostly between 0 - 2
 
 # Now do the grid search for the best alpha
 alpha_grid <- seq(0, 1, by = 0.01) # as specified
@@ -262,7 +268,7 @@ best_alpha_1se_k10 <- results_k10$alpha[which.min(results_k10$cvm_1se)] # 0
 lambda_min_k10 <- results_k10$lambda_min[results_k10$alpha == best_alpha_min_k10]
 lambda_1se_k10 <- results_k10$lambda_1se[results_k10$alpha == best_alpha_1se_k10]
 
-# Fit final models
+# Fit final models for both min and 1se
 enet_model_min_k10 <- glmnet(X_train_scaled, y_train, 
                          alpha = best_alpha_min_k10, 
                          lambda = lambda_min_k10,
@@ -275,7 +281,7 @@ enet_model_1se_k10 <- glmnet(X_train_scaled, y_train,
                          family = "binomial",
                          keep = "TRUE")
 
-# Fitted values and test set predictions
+# Fitted values and test set predictions for lambda.min
 prds.train_k10 <- predict(enet_model_min_k10,newx = X_train_scaled, type = "response", s=lambda_min_k10)[,1]
 prds.test_k10 <- predict(enet_model_min_k10,newx = X_test_scaled, type = "response", s=lambda_min_k10)[,1]
 
@@ -285,16 +291,34 @@ auc.train_k10 #0.9129
 
 auc.test_k10 <- roc(y_test,prds.test_k10)
 auc.test_k10 #0.8295
+
+# Fitted values and test set predictions for k10, lambda.1se
+prds_train_1se <- predict(enet_model_1se_k10,newx = X_train_scaled, type = "response", s=lambda_1se_k10)[,1]
+prds_test_1se <- predict(enet_model_1se_k10,newx = X_test_scaled, type = "response", s=lambda_1se_k10)[,1]
+
+# Prediction Accuracy
+auc.train_k10_1se <- roc(y_train,prds_train_1se)
+auc.train_k10 #0.9634
+
+auc.test_k10_1se <- roc(y_test,prds_test_1se)
+auc.test_k10 #0.8409
 ```
+
 ```{r}
+#plot AUC curves to visualize for k fold = 10, lambda.min
 par(mfrow=c(1,2))
 
 plot(auc.train_k10)
 plot(auc.test_k10)
+
+#for k fold 10, lambda.1se
+par(mfrow=c(1,2))
+plot(auc.train_k10_1se)
+plot(auc.test_k10_1se) 
 ```
 
 ```{r}
-# Confusion matrix
+# Confusion matrix for k10 min
 table(y_test) 
 table(as.numeric(prds.train_k10>.5))
 
@@ -308,9 +332,68 @@ sn.sp <- function(mat){
 }
 
 sn.sp(conf.mat_k10)
+# this was for threshold 0.5
 #sensitivity 0.792
 #specificity 0.909
 
+# Need to find threshold to balance between sensitivity and specificity
+# function to find threshold
+threshold <- function (auc_input) {
+  snsp.train <- cbind(auc_input$sensitivities,auc_input$specificities)
+  head(snsp.train)
+
+  indx <- which.max(apply(snsp.train,1,min))  ### min-max approach
+
+  ## the threshold
+  cutoff <- auc_input$thresholds[indx]
+  return(cutoff)
+}
+
+# for training
+cutoff <- threshold(auc.train_k10)
+cutoff
+
+#Confusion matrix for new cutoff value
+table(y=y_train,yhat=as.numeric(prds.train_k10>cutoff))
+sn.sp(table(y=y_train,yhat=as.numeric(prds.train_k10>cutoff))) ## TRAIN SET
+#sensitivity specificity 
+#     0.970       0.917 
+      
+# For testing set
+cutoff_test <- threshold(auc.test_k10)
+
+#Confusion matrix table for new cutoff
+table(y=y_test,yhat=as.numeric(prds.test_k10>cutoff_test))
+sn.sp(table(y=y_test,yhat=as.numeric(prds.test_k10>cutoff_test))) ## TEST SET
+#sensitivity specificity 
+#      0.818       0.750 
+```
+
+```{r}
+# Confusion matrix for k10 lambda.1se
+# Need to balance between sensitivity and specificity
+# for training
+cutoff_train_1se <- threshold(auc.train_k10_1se)
+
+#Confusion matrix for new cutoff value
+table(y=y_train,yhat=as.numeric(prds_train_1se>cutoff_train_1se))
+sn.sp(table(y=y_train,yhat=as.numeric(prds.train_k10>cutoff_train_1se))) ## TRAIN SET
+# sensitivity specificity 
+#      0.879       0.917 
+      
+# For testing set
+## finding the threshold
+cutoff_test_1se <- threshold(auc.test_k10_1se)
+
+#Confusion matrix table for new cutoff
+table(y=y_test,yhat=as.numeric(prds.test_k10>cutoff_test_1se))
+sn.sp(table(y=y_test,yhat=as.numeric(prds.test_k10>cutoff_test_1se))) ## TEST SET
+#sensitivity specificity 
+#      0.818       0.750
+
+```
+
+```{r}
 ## with k=20 ###
 results_k20 <- data.frame()
 
@@ -367,7 +450,7 @@ enet_model_1se_k20 <- glmnet(X_train_scaled, y_train,
                          family = "binomial",
                          keep = "TRUE")
 
-# Fitted values and test set predictions
+# Fitted values and test set predictions for k10 lambda.min
 prds.train_k20 <- predict(enet_model_min_k20,newx = X_train_scaled, type = "response", s=lambda_min_k20)[,1]
 prds.test_k20 <- predict(enet_model_min_k20,newx = X_test_scaled, type = "response", s=lambda_min_k20)[,1]
 
@@ -377,6 +460,7 @@ auc.train_k20 #0.9129
 
 auc.test_k20 <- roc(y_test,prds.test_k20)
 auc.test_k20 #0.8295
+
 ```
 ```{r}
 par(mfrow=c(1,2))
@@ -399,12 +483,26 @@ sn.sp <- function(mat){
 }
 
 sn.sp(conf.mat_k20)
-#sensitivity 0.792
+#sensitivity 0.792 
 #specificity 0.879
+
+# Using the min-max approach to balance between sensitivity and specificity
+# for training
+snsp.train <- cbind(auc.train_k10$sensitivities,auc.train_k10$specificities)
+head(snsp.train)
+
+indx <- which.max(apply(snsp.train,1,min))  ### min-max approach
+indx
+
+## And the threshold?
+
+cutoff <- auc.train_k10$thresholds[indx]
+cutoff 
+
 ```
 
 ```{r}
-# Combine ROC plots to compare 10- and 20- fold cross validation
+# Combine ROC plots to compare 10- and 20- fold cross validation for testing data
 p1 <- ggroc(auc.test_k10, col = "blue") + 
   ggtitle(paste0("ROC Curve (10-fold CV)  AUC = ", round(auc(auc.test_k10),2)))
 
@@ -415,6 +513,7 @@ p1 + p2
 ```
 
 ```{r}
+# Combine ROC plots to compare 10- and 20- fold cross validation for training data
 p3 <- ggroc(auc.train_k10, col = "blue") + 
   ggtitle(paste0("ROC Curve (10-fold CV)  AUC = ", round(auc(auc.train_k10),2)))
 
@@ -427,7 +526,7 @@ p3 + p4
 ```{r}
 ## extract top predictors
 # Function to extract top N predictors from a model
-extract_top_predictors <- function(model, n = 10, lambda_type = "min") {
+extract_top_predictors <- function(model, n = 10, lambda_type = type) {
   # Get coefficients
   if (lambda_type == "min") {
     coefs <- as.matrix(coef(model))[, 1]
@@ -465,14 +564,14 @@ enet_top_min <- extract_top_predictors(enet_model_min, n = 10, lambda_type = "mi
 print(enet_top_min)
 
 cat("\nElastic Net (lambda.1se):\n")
-enet_top_1se <- extract_top_predictors(enet_model_1se, n = 10, lambda_type = "min")
+enet_top_1se <- extract_top_predictors(enet_model_1se, n = 10, lambda_type = "1se")
 print(enet_top_1se)
 
 #For kfold 20
 enet_top_min_k20 <- extract_top_predictors(enet_model_min_k20, n = 10, lambda_type = "min")
 print(enet_top_min_k20)
 
-enet_top_1se_k20 <- extract_top_predictors(enet_model_1se_k20, n = 10, lambda_type = "min")
+enet_top_1se_k20 <- extract_top_predictors(enet_model_1se_k20, n = 10, lambda_type = "1se")
 print(enet_top_1se_k20)
 
 ```
