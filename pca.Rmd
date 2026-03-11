@@ -4,10 +4,18 @@ output: html_notebook
 ---
 
 BINF 6970 Assignment 2:
+T cells are continuously generated in the bone marrow to maintain a diverse repertoire capable of responding to pathogens. Following thymic selection, naïve (NAI) T cells migrate to peripheral tissues, where they need to encounter specific antigens and additional signals for clonal expansion and differentiation into effector (EFFE) and memory (MEM) cells. The exact genetic mechanisms governing this differentiation process are not fully understood, and there is ongoing debate as to whether NAI T cells differentiate into EFFEs first, which subsequently become MEM cells (linear model), or if they directly differentiate into both EFFE and MEM cells simultaneously (parallel model). Consider the data provided in geneexpression2.rda where rows are samples from different subjects and different T cell types and the columns are a subset of gene expression measurements on the 156 most differentially expressed genes as studied in (Holmes et al., 2005).
 
-1- Perform PCA on this dataset treating differentially expressed genes as the variables.
+Notes
+- The row names (e.g. in HEA26_EFFE_1) provide important information:
+- Hea26_ represents status of the subject and EFFE_1 represents a cell type.
+
+1 - Perform PCA on this dataset treating differentially expressed genes as the variables.
+2 - Visualize the PCs and investigate how they relate to cell and status types.
+3 - Write down your interpretation considering the conclusions drawn in the article (Holmes et al., 2005)
 
 ```{r}
+# Question 1 ----
 # Load in file
 load("geneexpression2.rda")
 dat
@@ -16,10 +24,18 @@ dat
 library(tidyverse)
 library(ggfortify)
 library(dplyr)
+library(patchwork)
+library(ggrepel)
 
+## Part 1 ----
 ## EDA
 str(dat)
 dim(dat) # 30 rows (patient samples) and 156 columns (differentially expressed genes)
+
+# Check for summary statistics to determine if data is scaled
+summary(dat)
+colMeans(dat) # means are not 0 or close to 0
+apply(dat, 2, sd) # standard deviations are not 1
 
 # Check for NAs in file
 sum(is.na(dat)) # 0 NA values in the dataset
@@ -44,48 +60,54 @@ dat_name %>%
   summarise()
 
 # Running PCA
-
-pc_data <- prcomp(dat) #, cor = F, scores = T) ## should we scale data?
-
 pc_data_scaled <- prcomp(dat, scale. = T) ## prcomp has center = TRUE as default, which we will leave as the default
 
-plot(pc_data)
+# Initial visualization of PCA results - distribution of how much variance is captured by each PC
+plot(pc_data_scaled)
 
-#Checks the variance explained by each PC
-summary(pc_data)[["importance"]]["Proportion of Variance",]
+# Checks the variance explained by each PC
+summary(pc_data_scaled)[["importance"]]["Proportion of Variance",]
 
-## Plotting scree plot and PC plot
-# plot all 
-autoplot(prcomp(dat), data = dat_name, colour="type", label = F, label.size = 3, size = 3, shape = "status") + theme_minimal()+labs(colour = "Cell Type", shape = "Status")  
+## Part 2 ----
+# Scaled PCA plot with cell type and health status 
+pca_plot_type_status <- autoplot(prcomp(dat, scale. = T), data = dat_name, colour = "type", shape = "status", size = 3) +
+  theme_minimal() +
+  labs(colour = "Cell Type", shape = "Status")
 
-## screeplot
-plot(as.ts(pc_data$sdev^2)) +
+pca_plot_type <- autoplot(prcomp(dat, scale. = T), data = dat_name, colour = "type", size = 3) +
+  theme_minimal() + 
+  labs(colour = "Cell Type")
+
+pca_plot_status <- autoplot(prcomp(dat, scale. = T), data = dat_name, shape = "status", size = 3) +
+  theme_minimal() + 
+  labs(colour = "Status")
+
+pca_plot_combined <- (pca_plot_type | pca_plot_status) / pca_plot_type_status
+pca_plot_combined
+
+## Screeplot
+plot(as.ts(pc_data_scaled$sdev^2)) +
 axis(side = 1, at = seq(1, 30, by = 1), labels = FALSE) # adds ticks for x-axis
 
-##  PCA Plot - no scaling
-autoplot(prcomp(dat, scale. = T), data = dat_name, colour="status", label = F, label.size = 3, point.size= 5) + theme_minimal()+scale_colour_discrete(name="Status")
-
-## PCA Plot scaled 
-pca_plot_labels <- colnames(dat_name)[str_starts(colnames(dat_name), "X")]
-autoplot(prcomp(dat, scale. = T), data = dat_name, colour="type", label = pca_plot_labels, label.size = 3, size = 3, shape = "status") + theme_minimal()+labs(colour = "Cell Type", shape = "Status")  
-
-## Extract loadings
+## Part 3 ----
+# Extract loadings
 loadings <- pc_data_scaled$rotation
 pc1_genes <- sort(abs(loadings[,1]), decreasing = TRUE)
 head(pc1_genes, 10)
 
+## Visualize all loadings and their contributions to variation in PC1 and PC2 with biplot
+autoplot(pc_data_scaled, data = dat_name,
+         loadings = TRUE,
+         loadings.label = FALSE, 
+         size = -1) +
+  geom_text_repel(aes(x = PC1, y = PC2, 
+                      label = case_when(
+                        str_detect(cell_type, "EFFE") ~ "effector",
+                        str_detect(cell_type, "MEM")  ~ "memory",
+                        str_detect(cell_type, "NAI")  ~ "naive")), 
+                  size = 3) +
+  theme_minimal()
 ```
-
-
-2- Visualize the PCs and investigate how they relate to cell and status types.
-3- Write down your interpretation considering the conclusions drawn in the article (Holmes et
-al., 2005)
-
-```{r}
-
-```
-
-
 
 Cytokines storm, a hyperinflammatory state caused by a deregulated immune system, is a key
 aspect of the novel coronavirus disease, with affected patients showing high levels of pro-
