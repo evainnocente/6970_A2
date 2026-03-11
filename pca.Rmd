@@ -65,8 +65,8 @@ pc_data_scaled <- prcomp(dat, scale. = T) ## prcomp has center = TRUE as default
 # Initial visualization of PCA results - distribution of how much variance is captured by each PC
 plot(pc_data_scaled)
 
-# Checks the variance explained by each PC
-summary(pc_data_scaled)[["importance"]]["Proportion of Variance",]
+# Checks the variance explained by each PC (top 10)
+round(head(summary(pc_data_scaled)[["importance"]]["Proportion of Variance",], 10), 4)
 
 ## Part 2 ----
 # Scaled PCA plot with cell type and health status 
@@ -94,7 +94,7 @@ axis(side = 1, at = seq(1, 30, by = 1), labels = FALSE) # adds ticks for x-axis
 ## Part 3 ----
 # Extract loadings
 loadings <- pc_data_scaled$rotation
-pc1_genes <- sort(abs(loadings[,1]), decreasing = TRUE)
+pc1_genes <- round(sort(abs(loadings[,1]), decreasing = TRUE), 4)
 head(pc1_genes, 10)
 
 ## Visualize all loadings and their contributions to variation in PC1 and PC2 with biplot
