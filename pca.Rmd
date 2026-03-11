@@ -394,7 +394,7 @@ p3 <- ggroc(auc.train_k10, col = "blue") +
   ggtitle(paste0("ROC Curve (10-fold CV)  AUC = ", round(auc(auc.train_k10),2)))
 
 p4 <- ggroc(auc.train_k20, col = "red") + 
-  ggtitle(paste0("ROC Curve (20-fold CV)  AUC = ", round(auc(auc.test_k20),2)))
+  ggtitle(paste0("ROC Curve (20-fold CV)  AUC = ", round(auc(auc.train_k20),2)))
 
 p3 + p4
 ```
