@@ -4,3 +4,4 @@
 .Ruserdata
 *.Rproj
 pca.nb.html
+.DS_Store
